@@ -1,4 +1,12 @@
 ---
+- set_fact:
+    kibana_etc: /opt/kibana/config
+  when: kibana_repo_version == '4.x'
+
+- set_fact:
+    kibana_etc: /etc/kibana
+  when: kibana_repo_version == '5.x'
+
 - include: setup-RedHat.yml
   when: ansible_os_family == 'RedHat'
 
@@ -18,7 +26,7 @@
   become: yes
   copy:
     content: "{{ kibana_server_ssl_key }}"
-    dest: "/etc/kibana/kibana_server_ssl.key"
+    dest: "{{ kibana_etc }}/kibana_server_ssl.key"
     owner: kibana
     group: kibana
     mode: 0600
@@ -29,7 +37,7 @@
   become: yes
   copy:
     content: "{{ kibana_server_ssl_certificate }}"
-    dest: "/etc/kibana/kibana_server_ssl.crt"
+    dest: "{{ kibana_etc }}/kibana_server_ssl.crt"
     owner: kibana
     group: kibana
     mode: 0644
