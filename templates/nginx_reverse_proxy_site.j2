@@ -1,0 +1,29 @@
+server {
+  server_name {{ item.1 }}.{{ kibana_hostname }};
+  {% if (nginx_ssl_key is defined) and (nginx_ssl_certificate is defined) -%}
+  listen 443;
+  ssl on;
+  ssl_certificate /etc/ssl/kibana_nginx_proxy_ssl.crt;
+  ssl_certificate_key /etc/ssl/kibana_nginx_proxy_ssl.key;
+  {% else -%}
+  listen 80;
+  {% endif -%}
+
+  ## Check if this certificate is really served for this server_name
+  ##   http://serverfault.com/questions/578648/properly-setting-up-a-default-nginx-server-for-https
+  if ($host != $server_name) {
+    return 444;
+  }
+
+  location / {
+    proxy_pass http://127.0.0.1:{{ 5601 + item.0 }};
+  }
+}
+
+{% if (nginx_ssl_key is defined) and (nginx_ssl_certificate is defined) -%}
+server {
+  server_name {{ item.1 }}.{{ kibana_hostname }};
+  listen 80;
+  return 301 https://{{ item.1 }}.{{ kibana_hostname }}$request_uri;
+}
+{%- endif -%}

@@ -20,7 +20,11 @@ elasticsearch.url: {{ kibana_elasticsearch_url }}
 
 # Kibana uses an index in Elasticsearch to store saved searches, visualizations
 # and dashboards. It will create a new index if it doesn't already exist.
+{% if kibana_index_name is defined -%}
+kibana.index: "{{ kibana_index_name }}"
+{% else -%}
 # kibana.index: ".kibana"
+{% endif -%}
 
 # The default application to load.
 # kibana.defaultAppId: "discover"

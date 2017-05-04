@@ -16,11 +16,38 @@
 - name: Install Kibana.
   package: name=kibana state=present
 
+#################################
+##   Single Kibana instance    ##
+#################################
+- name: Ensure Kibana systemd service definition is up-to-date
+  become: yes
+  template:
+    src: templates/systemd-kibana.service.j2
+    dest: /etc/systemd/system/kibana.service
+    owner: root
+    group: root
+    mode: 0664
+  notify:
+    - reload systemd
+    - restart kibana
+  when: kibana_instances is not defined
+
 - name: Ensure Kibana is started and enabled at boot.
   service:
     name: kibana
     state: started
     enabled: yes
+  when: kibana_instances is not defined
+
+- name: Copy Kibana configuration.
+  template:
+    src: kibana.yml.j2
+    dest: "{{ kibana_etc }}/kibana.yml"
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart kibana
+  when: kibana_instances is not defined
 
 - name: Copy Kibana SSL key
   become: yes
@@ -31,7 +58,7 @@
     group: kibana
     mode: 0600
   notify: restart kibana
-  when: kibana_server_ssl_key is defined
+  when: (kibana_instances is not defined) and (kibana_server_ssl_key is defined)
 
 - name: Copy Kibana SSL certificate
   become: yes
@@ -42,20 +69,175 @@
     group: kibana
     mode: 0644
   notify: restart kibana
-  when: kibana_server_ssl_certificate is defined
+  when: (kibana_instances is not defined) and (kibana_server_ssl_certificate is defined)
 
-- set_fact:
-    kibana_etc: /opt/kibana/config
-  when: kibana_repo_version == '4.x'
-- set_fact:
-    kibana_etc: /etc/kibana
-  when: kibana_repo_version == '5.x'
+#################################
+##  Multiple Kibana instances  ##
+#################################
 
-- name: Copy Kibana configuration.
+- name: Remove default Kibana service
+  file:
+    path: /etc/systemd/system/kibana.service
+    state: absent
+  notify:
+    - reload systemd
+    - restart kibana
+  when: kibana_instances is defined
+
+- name: Ensure Kibana systemd service definitions are up-to-date
+  become: yes
+  template:
+    src: templates/systemd-kibana.service.j2
+    dest: /etc/systemd/system/kibana-{{ item }}.service
+    owner: root
+    group: root
+    mode: 0664
+  with_items: "{{ kibana_instances }}"
+  notify:
+    - reload systemd
+    - restart kibana
+  when: kibana_instances is defined
+
+- name: Ensure Kibana services are started and enabled at boot.
+  service:
+    name: kibana-{{ item }}
+    state: started
+    enabled: yes
+  with_items: "{{ kibana_instances }}"
+  when: kibana_instances is defined
+
+- name: Copy Kibana configurations
+  vars:
+    kibana_server_port: "{{ 5601 + item.0 }}"
+    kibana_server_host: localhost
+    kibana_index_name: ".kibana-{{ item.1 }}"
   template:
     src: kibana.yml.j2
-    dest: "{{ kibana_etc }}/kibana.yml"
+    dest: "{{ kibana_etc }}/kibana-{{ item.1 }}.yml"
     owner: root
     group: root
     mode: 0644
-  notify: restart kibana
+  with_indexed_items: "{{ kibana_instances }}"
+  notify: restart kibanas
+  when: kibana_instances is defined
+
+- name: Ensure nginx is installed
+  apt:
+    name: nginx
+    state: present
+  when: kibana_instances is defined
+
+- name: Configure default nginx site
+  template:
+    src: templates/nginx_default_site.j2
+    dest: /etc/nginx/sites-available/default
+    owner: root
+    group: root
+    mode: 0644
+  notify: restart nginx
+  when: kibana_instances is defined
+
+- name: Enable default nginx site
+  file:
+    src: /etc/nginx/sites-available/default
+    dest: /etc/nginx/sites-enabled/default
+    state: link
+  notify: restart nginx
+  when: kibana_instances is defined
+
+- name: Configure nginx reverse proxy sites
+  template:
+    src: templates/nginx_reverse_proxy_site.j2
+    dest: /etc/nginx/sites-available/{{ item.1 }}
+    owner: root
+    group: root
+    mode: 0644
+  with_indexed_items: "{{ kibana_instances }}"
+  notify: restart nginx
+  when: kibana_instances is defined
+
+- name: Copy nginx SSL key
+  become: yes
+  copy:
+    content: "{{ nginx_ssl_key }}"
+    dest: "/etc/ssl/kibana_nginx_proxy_ssl.key"
+    owner: root
+    group: root
+    mode: 0600
+  notify: restart nginx
+  when: (kibana_instances is defined) and (nginx_ssl_key is defined)
+
+- name: Copy nginx SSL certificate
+  become: yes
+  copy:
+    content: "{{ nginx_ssl_certificate }}"
+    dest: "/etc/ssl/kibana_nginx_proxy_ssl.crt"
+    owner: root
+    group: root
+    mode: 0600
+  notify: restart nginx
+  when: (kibana_instances is defined) and (nginx_ssl_certificate is defined)
+
+- name: Enable nginx sites
+  file:
+    src: /etc/nginx/sites-available/{{ item }}
+    dest: /etc/nginx/sites-enabled/{{ item }}
+    state: link
+  with_items: "{{ kibana_instances }}"
+  notify: restart nginx
+  when: kibana_instances is defined
+
+- name: Remove default Kibana configuration
+  file:
+    path: "{{ kibana_etc }}/kibana.yml"
+    state: absent
+  when: kibana_instances is defined
+
+##  Cleanup old instances, if needed
+- name: Terminate decomissioned Kibana instance services
+  service:
+    name: kibana-{{ item }}
+    state: stopped
+    enabled: no
+  with_items: "{{ decomissioned_kibana_instances }}"
+  ignore_errors: yes
+  when: decomissioned_kibana_instances is defined
+
+- name: Remove decomissioned Kibana instance systemd service definitions
+  become: yes
+  file:
+    path: /etc/systemd/system/kibana-{{ item }}.service
+    state: absent
+  with_items: "{{ decomissioned_kibana_instances }}"
+  notify:
+    - reload systemd
+    - restart kibana
+  ignore_errors: yes
+  when: decomissioned_kibana_instances is defined
+
+- name: Remove decomissioned Kibana instance configurations
+  file:
+    path: "{{ kibana_etc }}/kibana-{{ item }}.yml"
+    state: absent
+  with_items: "{{ decomissioned_kibana_instances }}"
+  notify: restart kibanas
+  ignore_errors: yes
+  when: decomissioned_kibana_instances is defined
+
+- name: Disable decomissioned Kibana nginx sites
+  file:
+    path: /etc/nginx/sites-enabled/{{ item }}
+    state: absent
+  with_items: "{{ decomissioned_kibana_instances }}"
+  notify: restart nginx
+  ignore_errors: yes
+  when: decomissioned_kibana_instances is defined
+
+- name: Remove decomissioned Kibana instance nginx reverse proxy sites
+  file:
+    path: /etc/nginx/sites-available/{{ item }}
+    state: absent
+  with_items: "{{ decomissioned_kibana_instances }}"
+  notify: restart nginx
+  ignore_errors: yes
+  when: decomissioned_kibana_instances is defined
