@@ -33,8 +33,16 @@ kibana.index: "{{ kibana_index_name }}"
 # used by the Kibana server to perform maintenance on the kibana_index at startup. Your Kibana
 # users will still need to authenticate with Elasticsearch (which is proxied through
 # the Kibana server)
+{% if elasticsearch_username is defined -%}
+elasticsearch.username: "{{ elasticsearch_username }}"
+{% else -%}
 # elasticsearch.username: "user"
+{% endif -%}
+{% if elasticsearch_username is defined -%}
+elasticsearch.password: "{{ elasticsearch_password }}"
+{% else -%}
 # elasticsearch.password: "pass"
+{% endif %}
 
 # SSL for outgoing requests from the Kibana Server to the browser (PEM formatted)
 {% if (kibana_server_ssl_key is defined) and (kibana_server_ssl_certificate is defined) %}
