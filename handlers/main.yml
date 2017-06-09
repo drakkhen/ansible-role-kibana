@@ -4,7 +4,7 @@
 
 - name: restart kibanas
   service:
-    name: kibana-{{ item }}
+    name: kibana-{{ item.name }}
     state: restarted
   with_items: "{{ kibana_instances }}"
 

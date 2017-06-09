@@ -88,7 +88,7 @@
   become: yes
   template:
     src: templates/systemd-kibana.service.j2
-    dest: /etc/systemd/system/kibana-{{ item }}.service
+    dest: /etc/systemd/system/kibana-{{ item.name }}.service
     owner: root
     group: root
     mode: 0664
@@ -100,7 +100,7 @@
 
 - name: Ensure Kibana services are started and enabled at boot.
   service:
-    name: kibana-{{ item }}
+    name: kibana-{{ item.name }}
     state: started
     enabled: yes
   with_items: "{{ kibana_instances }}"
@@ -110,10 +110,11 @@
   vars:
     kibana_server_port: "{{ 5601 + item.0 }}"
     kibana_server_host: localhost
-    kibana_index_name: ".kibana-{{ item.1 }}"
+    kibana_elasticsearch_username: "kibana-{{ item.1.name }}"
+    kibana_index_name: ".kibana-{{ item.1.name }}"
   template:
     src: kibana.yml.j2
-    dest: "{{ kibana_etc }}/kibana-{{ item.1 }}.yml"
+    dest: "{{ kibana_etc }}/kibana-{{ item.1.name }}.yml"
     owner: root
     group: root
     mode: 0644
@@ -148,7 +149,7 @@
 - name: Configure nginx reverse proxy sites
   template:
     src: templates/nginx_reverse_proxy_site.j2
-    dest: /etc/nginx/sites-available/{{ item.1 }}
+    dest: /etc/nginx/sites-available/{{ item.1.name }}
     owner: root
     group: root
     mode: 0644
@@ -180,8 +181,8 @@
 
 - name: Enable nginx sites
   file:
-    src: /etc/nginx/sites-available/{{ item }}
-    dest: /etc/nginx/sites-enabled/{{ item }}
+    src: /etc/nginx/sites-available/{{ item.name }}
+    dest: /etc/nginx/sites-enabled/{{ item.name }}
     state: link
   with_items: "{{ kibana_instances }}"
   notify: restart nginx

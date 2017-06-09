@@ -1,6 +1,6 @@
 [Unit]
 {% if item is defined %}
-Description=Kibana - {{ item }}
+Description=Kibana - {{ item.name }}
 {% else %}
 Description=Kibana
 {% endif %}
@@ -15,7 +15,7 @@ Group=kibana
 EnvironmentFile=-/etc/default/kibana
 EnvironmentFile=-/etc/sysconfig/kibana
 {% if item is defined %}
-ExecStart=/usr/share/kibana/bin/kibana "-c {{ kibana_etc }}/kibana-{{ item }}.yml"
+ExecStart=/usr/share/kibana/bin/kibana "-c {{ kibana_etc }}/kibana-{{ item.name }}.yml"
 {% else %}
 ExecStart=/usr/share/kibana/bin/kibana "-c {{ kibana_etc }}/kibana.yml"
 {% endif %}

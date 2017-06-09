@@ -1,5 +1,5 @@
 server {
-  server_name {{ item.1 }}.{{ kibana_hostname }};
+  server_name {{ item.1.name }}.{{ kibana_hostname }};
   {% if (nginx_ssl_key is defined) and (nginx_ssl_certificate is defined) -%}
   listen 443;
   ssl on;
@@ -22,8 +22,8 @@ server {
 
 {% if (nginx_ssl_key is defined) and (nginx_ssl_certificate is defined) -%}
 server {
-  server_name {{ item.1 }}.{{ kibana_hostname }};
+  server_name {{ item.1.name }}.{{ kibana_hostname }};
   listen 80;
-  return 301 https://{{ item.1 }}.{{ kibana_hostname }}$request_uri;
+  return 301 https://{{ item.1.name }}.{{ kibana_hostname }}$request_uri;
 }
 {%- endif -%}
