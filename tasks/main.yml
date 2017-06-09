@@ -122,10 +122,146 @@
   notify: restart kibanas
   when: kibana_instances is defined
 
-- name: Ensure nginx is installed
+- name: Ensure default nginx packages are not installed
   apt:
-    name: nginx
+    name: "{{ item }}"
+    state: absent
+  with_items:
+    - nginx
+    - nginx-common
+    - nginx-core
+  when: kibana_instances is defined
+
+- name: Install nginx dependencies
+  apt:
+    name: "{{ item }}"
     state: present
+  with_items:
+    - libpcre3
+    - libpcre3-dev
+    - libldap-dev
+    - libssl-dev
+    - libxslt1-dev
+    - libgd-dev
+    - libgeoip-dev
+    - zlib1g-dev
+  when: kibana_instances is defined
+
+- name: Ensure nginx source code is available
+  get_url:
+    url:  http://nginx.org/download/nginx-1.9.9.tar.gz
+    checksum: "sha1:8262504469b86b967cdeb0821607a94ce863dfb4"
+    dest: /usr/local/src/nginx-1.9.9.tar.gz
+    owner: root
+    group: root
+    mode: 0600
+  when: kibana_instances is defined
+
+- name: Clone or update nginx-auth-ldap git repository
+  become: yes
+  git:
+    repo: "https://github.com/kvspb/nginx-auth-ldap.git"
+    dest: "/usr/local/src/nginx-auth-ldap"
+    force: yes
+  when: kibana_instances is defined
+  register: nginx_auth_ldap_code
+
+- name: Extract nginx
+  become: yes
+  unarchive:
+    src: /usr/local/src/nginx-1.9.9.tar.gz
+    dest: /usr/local/src
+    remote_src: yes
+  when: kibana_instances is defined
+  register: nginx_source_code
+
+- name: Configure nginx
+  become: yes
+  command: ./configure --with-cc-opt='-g -O2 -fPIE -fstack-protector-strong -Wformat -Werror=format-security -Wdate-time -D_FORTIFY_SOURCE=2' --with-ld-opt='-Wl,-Bsymbolic-functions -fPIE -pie -Wl,-z,relro -Wl,-z,now' --prefix=/usr/share/nginx --conf-path=/etc/nginx/nginx.conf --http-log-path=/var/log/nginx/access.log --error-log-path=/var/log/nginx/error.log --lock-path=/var/lock/nginx.lock --pid-path=/run/nginx.pid --http-client-body-temp-path=/var/lib/nginx/body --http-fastcgi-temp-path=/var/lib/nginx/fastcgi --http-proxy-temp-path=/var/lib/nginx/proxy --http-scgi-temp-path=/var/lib/nginx/scgi --http-uwsgi-temp-path=/var/lib/nginx/uwsgi --with-debug --with-pcre-jit --with-ipv6 --with-http_ssl_module --with-http_stub_status_module --with-http_realip_module --with-http_auth_request_module --with-http_addition_module --with-http_dav_module --with-http_geoip_module --with-http_gunzip_module --with-http_gzip_static_module --with-http_image_filter_module --with-http_v2_module --with-http_sub_module --with-http_xslt_module --with-stream --with-stream_ssl_module --with-mail --with-mail_ssl_module --with-threads --add-module=/usr/local/src/nginx-auth-ldap
+  args:
+    chdir: /usr/local/src/nginx-1.9.9
+  when: nginx_source_code.changed or nginx_auth_ldap_code.changed
+  notify: restart nginx
+
+- name: Compile nginx
+  become: yes
+  command: make
+  args:
+    chdir: /usr/local/src/nginx-1.9.9
+  when: nginx_source_code.changed or nginx_auth_ldap_code.changed
+
+- name: Install nginx
+  become: yes
+  command: make install
+  args:
+    chdir: /usr/local/src/nginx-1.9.9
+  when: nginx_source_code.changed or nginx_auth_ldap_code.changed
+  notify: restart nginx
+
+- name: Ensure nginx configuration directories exist
+  become: yes
+  file:
+    dest: "/etc/nginx/{{ item }}"
+    state: directory
+    owner: root
+    group: root
+    mode: 0755
+  with_items:
+    - conf.d
+    - sites-available
+    - sites-enabled
+  when: kibana_instances is defined
+
+- name: Ensure nginx var/lib directories exist
+  become: yes
+  file:
+    dest: "/var/lib/{{ item }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: 0700
+  with_items:
+    - nginx
+    - nginx/body
+    - nginx/fastcgi
+    - nginx/proxy
+    - nginx/scgi
+    - nginx/uwsgi
+  when: kibana_instances is defined
+
+- name: Ensure main nginx.conf is current
+  become: yes
+  template:
+    src: templates/nginx.conf.j2
+    dest: /etc/nginx/nginx.conf
+    owner: root
+    group: root
+    mode: 0644
+  when: kibana_instances is defined
+  notify: restart nginx
+
+- name: Configure nginx systemd service
+  become: yes
+  template:
+    src: templates/systemd-nginx.service.j2
+    dest: /lib/systemd/system/nginx.service
+    owner: root
+    group: root
+    mode: 0644
+  notify:
+    - reload systemd
+    - restart nginx
+  when: kibana_instances is defined
+
+- name: Symlink nginx systemd service
+  become: yes
+  file:
+    src: /lib/systemd/system/nginx.service
+    dest: /etc/systemd/system/multi-user.target.wants/nginx.service
+    state: link
+  notify:
+    - reload systemd
+    - restart nginx
   when: kibana_instances is defined
 
 - name: Configure default nginx site

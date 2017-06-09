@@ -8,11 +8,11 @@
     state: restarted
   with_items: "{{ kibana_instances }}"
 
+- name: reload systemd
+  become: yes
+  command: systemctl daemon-reload
+
 - name: restart nginx
   service:
     name: nginx
     state: restarted
-
-- name: reload systemd
-  become: yes
-  command: systemctl daemon-reload
