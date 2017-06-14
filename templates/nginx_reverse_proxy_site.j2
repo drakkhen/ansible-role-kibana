@@ -1,6 +1,7 @@
 ldap_server ldap-{{ item.1.name }} {
   url {{ ldap_url }};
   connections: 1;
+  max_down_retries_count: 9000;
 
   binddn {{ ldap_binddn }};
   binddn_passwd {{ ldap_binddn_passwd }};

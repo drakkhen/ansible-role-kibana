@@ -160,7 +160,9 @@
 - name: Clone or update nginx-auth-ldap git repository
   become: yes
   git:
-    repo: "https://github.com/kvspb/nginx-auth-ldap.git"
+#    repo: "https://github.com/kvspb/nginx-auth-ldap.git"
+    repo: "https://github.com/dkiser/nginx-auth-ldap.git"
+    version: max_down_retries  # PR from dkiser
     dest: "/usr/local/src/nginx-auth-ldap"
     force: yes
   when: kibana_instances is defined
